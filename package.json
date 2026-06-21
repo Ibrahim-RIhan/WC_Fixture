@@ -3,7 +3,6 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "homepage": "https://Ibrahim-RIhan.github.io/WC_Fixture/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,6 +11,8 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "framer-motion": "^12.40.0",
+    "lucide-react": "^1.21.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

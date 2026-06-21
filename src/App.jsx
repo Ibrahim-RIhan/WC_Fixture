@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { TEAMS, GROUPS, FEEDS_MAP, BRACKET_COLUMNS, R32_IDS, R16_IDS, QF_IDS, SF_IDS } from './data'
 import Hero from './components/Hero'
 import ProgressBar from './components/ProgressBar'
@@ -14,18 +15,15 @@ function App() {
   const [champion, setChampion] = useState(null)
   const knockoutRef = useRef(null)
 
-  // Toggle team selection in a group (1st → 2nd → 3rd → deselect)
   const toggleTeamSelection = useCallback((group, code) => {
     setGroupSelections(prev => {
       const sel = { ...(prev[group] || {}) }
-      // If already selected, remove
       for (const pos of ['1st', '2nd', '3rd']) {
         if (sel[pos] === code) {
           delete sel[pos]
           return { ...prev, [group]: sel }
         }
       }
-      // Assign next slot
       if (!sel['1st']) sel['1st'] = code
       else if (!sel['2nd']) sel['2nd'] = code
       else if (!sel['3rd']) sel['3rd'] = code
@@ -33,7 +31,6 @@ function App() {
     })
   }, [])
 
-  // Randomize all groups
   const randomizeGroups = useCallback(() => {
     const newSelections = {}
     Object.entries(GROUPS).forEach(([letter, teamCodes]) => {
@@ -43,17 +40,14 @@ function App() {
     setGroupSelections(newSelections)
   }, [])
 
-  // Check if all groups are complete
   const allGroupsComplete = Object.keys(GROUPS).every(
     g => groupSelections[g]?.['1st'] && groupSelections[g]?.['2nd'] && groupSelections[g]?.['3rd']
   )
 
-  // Create R32 matchups avoiding same-group clashes
   const createR32Matchups = (winners, runnersUp, advancingThird) => {
     const matchups = []
     const thirdCopy = [...advancingThird]
 
-    // 8 winners vs 8 third-place teams
     for (let i = 0; i < Math.min(8, winners.length); i++) {
       const w = winners[i]
       let pairIdx = thirdCopy.findIndex(t => t.group !== w.group)
@@ -62,7 +56,6 @@ function App() {
       matchups.push([w.code, pair.code])
     }
 
-    // Remaining 4 winners vs runners-up
     const runnersUpCopy = [...runnersUp]
     for (let i = 8; i < winners.length; i++) {
       const w = winners[i]
@@ -72,7 +65,6 @@ function App() {
       matchups.push([w.code, pair.code])
     }
 
-    // Remaining runners-up paired
     while (runnersUpCopy.length >= 2) {
       const t1 = runnersUpCopy.shift()
       let pairIdx = runnersUpCopy.findIndex(r => r.group !== t1.group)
@@ -84,7 +76,6 @@ function App() {
     return matchups
   }
 
-  // Confirm groups and build knockout bracket
   const confirmGroups = useCallback(() => {
     if (!allGroupsComplete) return
 
@@ -100,11 +91,9 @@ function App() {
     const r32 = createR32Matchups(winners, runnersUp, advancingThird)
 
     const matches = {}
-    // R32
     R32_IDS.forEach((id, i) => {
       matches[id] = { teams: [r32[i][0], r32[i][1]], winner: null, scores: null, matchNum: 49 + i }
     })
-    // R16 onwards — empty
     ;[...R16_IDS, ...QF_IDS, ...SF_IDS, 'FINAL'].forEach(id => {
       matches[id] = { teams: [null, null], winner: null, scores: null }
     })
@@ -115,14 +104,12 @@ function App() {
     setTimeout(() => knockoutRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
   }, [allGroupsComplete, groupSelections])
 
-  // Generate realistic random scores
   const genScores = () => {
     const s1 = Math.random() < 0.15 ? 0 : Math.floor(Math.random() * 4)
     const s2 = Math.random() < 0.15 ? 0 : Math.floor(Math.random() * 4)
     return [s1, s2]
   }
 
-  // Clear downstream bracket entries
   const clearDownstream = (matches, matchId) => {
     const m = matches[matchId]
     if (!m) return
@@ -138,7 +125,6 @@ function App() {
     }
   }
 
-  // Select a knockout winner
   const selectKnockoutWinner = useCallback((matchId, winnerCode) => {
     setBracketMatches(prev => {
       const next = JSON.parse(JSON.stringify(prev))
@@ -153,7 +139,6 @@ function App() {
       match.scores[lIdx] = Math.min(s1, s2)
       match.winner = winnerCode
 
-      // Propagate
       const target = FEEDS_MAP[matchId]
       if (target) {
         const [nextId, slot] = target
@@ -163,7 +148,6 @@ function App() {
         next[nextId].teams[slot] = winnerCode
       }
 
-      // Update step
       const r32Done = R32_IDS.every(id => next[id].winner)
       const r16Done = R16_IDS.every(id => next[id].winner)
       const qfDone = QF_IDS.every(id => next[id].winner)
@@ -185,7 +169,6 @@ function App() {
     })
   }, [])
 
-  // Simulate all knockout matches with animation
   const simulateAll = useCallback(async () => {
     const allRounds = [R32_IDS, R16_IDS, QF_IDS, SF_IDS, ['FINAL']]
     let current = JSON.parse(JSON.stringify(bracketMatches))
@@ -197,7 +180,6 @@ function App() {
         const wIdx = Math.random() < 0.5 ? 0 : 1
         const winnerCode = m.teams[wIdx]
 
-        // We need to sequentially update state for animation
         await new Promise(resolve => {
           setTimeout(() => {
             selectKnockoutWinner(matchId, winnerCode)
@@ -205,7 +187,6 @@ function App() {
           }, 180)
         })
 
-        // Re-read state won't work in async, so track locally too
         const [s1, s2] = genScores()
         const lIdx = wIdx === 0 ? 1 : 0
         m.scores = [0, 0]
@@ -222,7 +203,6 @@ function App() {
     }
   }, [bracketMatches, selectKnockoutWinner])
 
-  // Reset
   const resetToGroups = () => {
     setView('groups')
     setBracketMatches({})
@@ -238,9 +218,14 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const pageVariants = {
+    initial: { opacity: 0, y: 20 },
+    in: { opacity: 1, y: 0 },
+    out: { opacity: 0, y: -20 }
+  }
+
   return (
     <div className="app">
-      {/* Animated background */}
       <div className="bg-animation">
         {[...Array(12)].map((_, i) => <div key={i} className="particle" style={{ '--i': i }} />)}
       </div>
@@ -248,30 +233,36 @@ function App() {
       <Hero onStart={() => document.getElementById('groupStage')?.scrollIntoView({ behavior: 'smooth' })} />
       <ProgressBar currentStep={currentStep} />
 
-      {view === 'groups' && (
-        <GroupStage
-          groupSelections={groupSelections}
-          onToggle={toggleTeamSelection}
-          onRandomize={randomizeGroups}
-          onConfirm={confirmGroups}
-          allComplete={allGroupsComplete}
-        />
-      )}
+      <AnimatePresence mode="wait">
+        {view === 'groups' && (
+          <motion.div key="groups" initial="initial" animate="in" exit="out" variants={pageVariants} transition={{ duration: 0.5 }}>
+            <GroupStage
+              groupSelections={groupSelections}
+              onToggle={toggleTeamSelection}
+              onRandomize={randomizeGroups}
+              onConfirm={confirmGroups}
+              allComplete={allGroupsComplete}
+            />
+          </motion.div>
+        )}
 
-      {view === 'knockout' && (
-        <div ref={knockoutRef}>
-          <KnockoutStage
-            bracketMatches={bracketMatches}
-            onSelectWinner={selectKnockoutWinner}
-            onSimulateAll={simulateAll}
-            onBack={resetToGroups}
-          />
-        </div>
-      )}
+        {view === 'knockout' && (
+          <motion.div key="knockout" initial="initial" animate="in" exit="out" variants={pageVariants} transition={{ duration: 0.5 }} ref={knockoutRef}>
+            <KnockoutStage
+              bracketMatches={bracketMatches}
+              onSelectWinner={selectKnockoutWinner}
+              onSimulateAll={simulateAll}
+              onBack={resetToGroups}
+            />
+          </motion.div>
+        )}
 
-      {view === 'winner' && champion && (
-        <WinnerCelebration team={TEAMS[champion]} onReset={resetAll} />
-      )}
+        {view === 'winner' && champion && (
+          <motion.div key="winner" initial="initial" animate="in" exit="out" variants={pageVariants} transition={{ duration: 0.5 }}>
+            <WinnerCelebration team={TEAMS[champion]} onReset={resetAll} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
